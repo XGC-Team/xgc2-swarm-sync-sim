@@ -9,6 +9,7 @@
     <arg name="init_roll_deg" default="0.0"/>
     <arg name="init_pitch_deg" default="0.0"/>
     <arg name="init_yaw_deg" default="0.0"/>
+    <arg name="use_preloaded_init_pose_params" default="false"/>
     <!-- world origin gps values if local_pos_source = 1 -->
     <arg name="world_origin_latitude_deg" default="39.978861"/> <!-- degree -->
     <arg name="world_origin_longitude_deg" default="116.339803"/> <!-- degree -->
@@ -38,12 +39,12 @@
             <!-- load local position source -->
             <param name="local_pos_source" value="$(arg local_pos_source)"/>
             <!-- load init position -->
-            <param name="init_x_East_metre" value="$(arg init_x_East_metre)"/>
-            <param name="init_y_North_metre" value="$(arg init_y_North_metre)"/>
-            <param name="init_z_Up_metre" value="$(arg init_z_Up_metre)"/>
-            <param name="init_roll_deg" value="$(arg init_roll_deg)"/>
-            <param name="init_pitch_deg" value="$(arg init_pitch_deg)"/>
-            <param name="init_yaw_deg" value="$(arg init_yaw_deg)"/>
+            <param unless="$(arg use_preloaded_init_pose_params)" name="init_x_East_metre" value="$(arg init_x_East_metre)"/>
+            <param unless="$(arg use_preloaded_init_pose_params)" name="init_y_North_metre" value="$(arg init_y_North_metre)"/>
+            <param unless="$(arg use_preloaded_init_pose_params)" name="init_z_Up_metre" value="$(arg init_z_Up_metre)"/>
+            <param unless="$(arg use_preloaded_init_pose_params)" name="init_roll_deg" value="$(arg init_roll_deg)"/>
+            <param unless="$(arg use_preloaded_init_pose_params)" name="init_pitch_deg" value="$(arg init_pitch_deg)"/>
+            <param unless="$(arg use_preloaded_init_pose_params)" name="init_yaw_deg" value="$(arg init_yaw_deg)"/>
             <param name="world_origin_latitude_deg" value="$(arg world_origin_latitude_deg)" type="double"/>
             <param name="world_origin_longitude_deg" value="$(arg world_origin_longitude_deg)" type="double"/>
             <param name="world_origin_AMSL_alt_metre" value="$(arg world_origin_AMSL_alt_metre)" type="double"/>
@@ -64,12 +65,12 @@
             <!-- load local position source -->
             <param name="local_pos_source" value="$(arg local_pos_source)"/>
             <!-- load init position -->
-            <param name="init_x_East_metre" value="$(arg init_x_East_metre)"/>
-            <param name="init_y_North_metre" value="$(arg init_y_North_metre)"/>
-            <param name="init_z_Up_metre" value="$(arg init_z_Up_metre)"/>
-            <param name="init_roll_deg" value="$(arg init_roll_deg)"/>
-            <param name="init_pitch_deg" value="$(arg init_pitch_deg)"/>
-            <param name="init_yaw_deg" value="$(arg init_yaw_deg)"/>
+            <param unless="$(arg use_preloaded_init_pose_params)" name="init_x_East_metre" value="$(arg init_x_East_metre)"/>
+            <param unless="$(arg use_preloaded_init_pose_params)" name="init_y_North_metre" value="$(arg init_y_North_metre)"/>
+            <param unless="$(arg use_preloaded_init_pose_params)" name="init_z_Up_metre" value="$(arg init_z_Up_metre)"/>
+            <param unless="$(arg use_preloaded_init_pose_params)" name="init_roll_deg" value="$(arg init_roll_deg)"/>
+            <param unless="$(arg use_preloaded_init_pose_params)" name="init_pitch_deg" value="$(arg init_pitch_deg)"/>
+            <param unless="$(arg use_preloaded_init_pose_params)" name="init_yaw_deg" value="$(arg init_yaw_deg)"/>
             <param name="world_origin_latitude_deg" value="$(arg world_origin_latitude_deg)" type="double"/>
             <param name="world_origin_longitude_deg" value="$(arg world_origin_longitude_deg)" type="double"/>
             <param name="world_origin_AMSL_alt_metre" value="$(arg world_origin_AMSL_alt_metre)" type="double"/>
