@@ -194,13 +194,6 @@ target_link_libraries(px4_rotor_visualizer_node
    px4_rotor_visualizer
 )
 
-add_executable(mavros_vrpn_forwarder_node
-                  src/mavros_px4_quadrotor_sim/mavros_vrpn_forwarder_node.cpp)
-
-target_link_libraries(mavros_vrpn_forwarder_node
-   ${catkin_LIBRARIES}
-)
-
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -384,7 +377,6 @@ target_link_libraries(mavros_vrpn_forwarder_node
 install(TARGETS 
 	mavros_px4_quadrotor_sim_node
 	px4_rotor_visualizer_node
-	mavros_vrpn_forwarder_node
 	px4_rotor_dynamics
 	px4_lib
 	mc_pos_control

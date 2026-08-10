@@ -21,7 +21,6 @@
     <!-- 0: mavros/local_position/pose will output the world coordinates of the drone -->
     <!-- 1: mavros/local_position/pose will output the coordinates relative to the initial point or gp_origin which can be changed by mavros/globa_position/set_gp_origin -->
     <arg name="open_rviz" default="true"/>
-    <arg name="enable_mavros_vrpn_forwarder" default="false"/>
 
     <!-- Same arguments for each vehicle that do not need set -->
 
@@ -96,11 +95,6 @@
         <node name="rviz" pkg="rviz" type="rviz" args="-d $(find px4_rotor_sim)/launch/single_px4_rotor.rviz" required="false" />
     </group>
 
-    <node if="$(arg enable_mavros_vrpn_forwarder)"
-          pkg="px4_rotor_sim"
-          type="mavros_vrpn_forwarder_node"
-          name="mavros_vrpn_forwarder"
-          output="screen"/>
 </group>
 
 
