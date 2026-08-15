@@ -29,16 +29,6 @@ on:
         required: false
         default: ""
         type: string
-      run_cpp_quality:
-        description: Run C++ quality checks
-        required: true
-        default: false
-        type: boolean
-      run_source_tests:
-        description: Run source tests
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   actions: read
@@ -79,7 +69,6 @@ jobs:
             echo "apt_overlay_url requires a dependency_set_digest" >&2
             exit 1
           fi
-
   validate-release-inputs:
     needs: prepare-contract
     runs-on: ubuntu-latest
@@ -87,6 +76,40 @@ jobs:
       version: ${{ steps.product.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+  package-compliance:
+    needs: validate-release-inputs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+  cpp-quality:
+    needs: validate-release-inputs
+    runs-on: ubuntu-latest
+    steps:
+      - name: No standalone C++ quality gate
+        run: echo "No standalone C++ quality gate is configured for swarm-sync-sim."
+  source-tests:
+    needs: validate-release-inputs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Source tests covered by package build
+        run: echo "Source and install checks run as part of the deb build."
+  build:
+    needs: validate-release-inputs
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    env:
+      PACKAGE_VERSION: ${{ needs.validate-release-inputs.outputs.version }}
+
+
 
       - name: Validate expected version and source SHA
         id: product
@@ -108,13 +131,6 @@ jobs:
             exit 1
           fi
 
-  package-compliance:
-    needs: validate-release-inputs
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
 
       - name: Check packaging metadata and scripts
         run: |
@@ -122,35 +138,8 @@ jobs:
           git diff --check HEAD
           bash -n .xgc2/scripts/*.sh
 
-  cpp-quality:
-    if: ${{ inputs.run_cpp_quality }}
-    needs: validate-release-inputs
-    runs-on: ubuntu-latest
-    steps:
-      - name: No standalone C++ quality gate
-        run: echo "No standalone C++ quality gate is configured for swarm-sync-sim."
 
-  source-tests:
-    if: ${{ inputs.run_source_tests }}
-    needs: validate-release-inputs
-    runs-on: ubuntu-latest
-    steps:
-      - name: Source tests covered by package build
-        run: echo "Source and install checks run as part of the deb build."
 
-  build:
-    needs: validate-release-inputs
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-latest
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-    runs-on: ${{ matrix.runner }}
-    env:
-      PACKAGE_VERSION: ${{ needs.validate-release-inputs.outputs.version }}
 
     steps:
       - uses: actions/checkout@v4
