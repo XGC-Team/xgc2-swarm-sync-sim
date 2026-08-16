@@ -76,6 +76,30 @@ jobs:
       version: ${{ steps.product.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+      - name: Validate expected version and source SHA
+        id: product
+        run: |
+          set -euo pipefail
+          version="$(sed -nE 's|^version:[[:space:]]*([^[:space:]#]+).*|\1|p' .xgc2/product.yml | head -n1)"
+          if [[ -z "${version}" ]]; then
+            echo "::error::missing version in .xgc2/product.yml"
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          if [[ "${version}" != "${{ inputs.expected_version }}" ]]; then
+            echo "::error::product.yml version ${version} does not match expected_version ${{ inputs.expected_version }}"
+            exit 1
+          fi
+          source_sha="$(git rev-parse HEAD)"
+          if [[ "${source_sha}" != "${{ inputs.expected_source_sha }}" ]]; then
+            echo "::error::HEAD ${source_sha} does not match expected_source_sha ${{ inputs.expected_source_sha }}"
+            exit 1
+          fi
+      - name: Check packaging metadata and scripts
+        run: |
+          set -euo pipefail
+          git diff --check HEAD
+          bash -n .xgc2/scripts/*.sh
   package-compliance:
     needs: validate-release-inputs
     runs-on: ubuntu-latest
@@ -108,39 +132,6 @@ jobs:
     runs-on: ${{ matrix.runner }}
     env:
       PACKAGE_VERSION: ${{ needs.validate-release-inputs.outputs.version }}
-
-
-
-      - name: Validate expected version and source SHA
-        id: product
-        run: |
-          set -euo pipefail
-          version="$(sed -nE 's|^version:[[:space:]]*([^[:space:]#]+).*|\1|p' .xgc2/product.yml | head -n1)"
-          if [[ -z "${version}" ]]; then
-            echo "::error::missing version in .xgc2/product.yml"
-            exit 1
-          fi
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
-          if [[ "${version}" != "${{ inputs.expected_version }}" ]]; then
-            echo "::error::product.yml version ${version} does not match expected_version ${{ inputs.expected_version }}"
-            exit 1
-          fi
-          source_sha="$(git rev-parse HEAD)"
-          if [[ "${source_sha}" != "${{ inputs.expected_source_sha }}" ]]; then
-            echo "::error::HEAD ${source_sha} does not match expected_source_sha ${{ inputs.expected_source_sha }}"
-            exit 1
-          fi
-
-
-      - name: Check packaging metadata and scripts
-        run: |
-          set -euo pipefail
-          git diff --check HEAD
-          bash -n .xgc2/scripts/*.sh
-
-
-
-
     steps:
       - uses: actions/checkout@v4
 
