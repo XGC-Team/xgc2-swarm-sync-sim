@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-DOCKER_IMAGE="${DOCKER_IMAGE:-ros:noetic-ros-base-focal}"
+DOCKER_IMAGE="${DOCKER_IMAGE:-ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.0}"
 WORK_DIR="${WORK_DIR:-${REPO_ROOT}/.work/docker}"
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/debs}"
 INSTALL_CHECK="${INSTALL_CHECK:-true}"
@@ -60,42 +60,6 @@ docker run --rm \
     set -euo pipefail
 
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update
-    apt-get install -y --no-install-recommends \
-      build-essential \
-      ca-certificates \
-      cmake \
-      dpkg-dev \
-      fakeroot \
-      file \
-      git \
-      libboost-dev \
-      libeigen3-dev \
-      python3-pyqt5 \
-      rsync \
-      ros-noetic-cmake-modules \
-      ros-noetic-eigen-conversions \
-      ros-noetic-geometry-msgs \
-      ros-noetic-mavros \
-      ros-noetic-mavros-extras \
-      ros-noetic-message-generation \
-      ros-noetic-message-runtime \
-      ros-noetic-nav-msgs \
-      ros-noetic-nodelet \
-      ros-noetic-pluginlib \
-      ros-noetic-robot-state-publisher \
-      ros-noetic-rosgraph-msgs \
-      ros-noetic-rospack \
-      ros-noetic-roslaunch \
-      ros-noetic-rviz \
-      ros-noetic-sensor-msgs \
-      ros-noetic-std-msgs \
-      ros-noetic-tf-conversions \
-      ros-noetic-tf2-geometry-msgs \
-      ros-noetic-tf2-ros \
-      ros-noetic-visualization-msgs \
-      ros-noetic-xacro
-
     rm -rf /workspace/work/src /workspace/work/build /workspace/work/devel /workspace/work/install-root
     mkdir -p /workspace/work/src
     rsync -a --delete /workspace/swarm_sync_sim/src/ /workspace/work/src/
