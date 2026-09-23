@@ -22,6 +22,7 @@
 #include <rosgraph_msgs/Clock.h>
 #include <std_msgs/Bool.h>
 // #include <boost/thread.hpp>
+#include <algorithm>
 #include <memory>
 #include <thread>
 #include <vector>
@@ -294,8 +295,12 @@ class TimerManagerExtra
             /* If all timers have next expected times, request the smallest one */
             if (all_timers_have_next_expected_time)
             {
-                std::sort(timer_info_list_.begin(), timer_info_list_.end(), compare_next_cb_time);
-                ros::Time request_time = timer_info_list_[0].next_expected_time;
+                // Selection does not require reordering the timer records. In addition
+                // to avoiding a full sort on every request, this preserves iterators
+                // held by the sequential remove_timer_info() path.
+                const auto earliest = std::min_element(
+                    timer_info_list_.begin(), timer_info_list_.end(), compare_next_cb_time);
+                ros::Time request_time = earliest->next_expected_time;
 
                 bool ret;
                 
