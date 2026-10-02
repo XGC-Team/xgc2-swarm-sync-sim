@@ -222,9 +222,10 @@ struct FlightRobot {
 
   void apply(const Grid &grid, uint32_t robot, const Input &input, int64_t applied_at) {
     if (!provider_enabled || input.generation != generation) return;
-    if (input.port == VelocityCommand)
-      throw std::invalid_argument(
-          "lightweight-vehicle: ground velocity on flight model");
+    if (input.port == VelocityCommand) {
+      grid.log(XGC_LOG_WARN, robot, "rejected ground velocity on flight model");
+      return;
+    }
     if (input.port == AttitudeCommand) {
       xgc_attitude_target_v2 wire;
       std::memcpy(&wire, input.data.data(), sizeof wire);
@@ -401,13 +402,17 @@ struct ScoutRobot {
       : model(xgc2_math::Pose2{{initial[0], initial[1]}, initial[3]}),
         z(initial[2]) {}
 
-  void apply(const Grid &grid, uint32_t, const Input &input, int64_t t) {
-    if (input.port != VelocityCommand)
-      throw std::invalid_argument(
-          input.port == Setpoint
-              ? "lightweight-vehicle: flight setpoint on ground model"
-              : "lightweight-vehicle: FCU request on ground model");
-    const auto value = body_velocity(input);
+  void apply(const Grid &grid, uint32_t robot, const Input &input, int64_t t) {
+    if (input.port != VelocityCommand) {
+      grid.log(XGC_LOG_WARN, robot, "rejected flight command on ground model");
+      return;
+    }
+    xgc_twist_v1 value;
+    try { value = body_velocity(input); }
+    catch (const std::invalid_argument &) {
+      grid.log(XGC_LOG_WARN, robot, "rejected nonfinite body velocity");
+      return;
+    }
     model.command(double(t - grid.epoch) * 1e-9, value.linear[0],
                   value.angular[2]);
   }
@@ -430,13 +435,17 @@ struct MecanumRobot {
       : model(xgc2_math::Pose2{{initial[0], initial[1]}, initial[3]}),
         z(initial[2]) {}
 
-  void apply(const Grid &, uint32_t, const Input &input, int64_t) {
-    if (input.port != VelocityCommand)
-      throw std::invalid_argument(
-          input.port == Setpoint
-              ? "lightweight-vehicle: flight setpoint on ground model"
-              : "lightweight-vehicle: FCU request on ground model");
-    const auto value = body_velocity(input);
+  void apply(const Grid &grid, uint32_t robot, const Input &input, int64_t) {
+    if (input.port != VelocityCommand) {
+      grid.log(XGC_LOG_WARN, robot, "rejected flight command on ground model");
+      return;
+    }
+    xgc_twist_v1 value;
+    try { value = body_velocity(input); }
+    catch (const std::invalid_argument &) {
+      grid.log(XGC_LOG_WARN, robot, "rejected nonfinite body velocity");
+      return;
+    }
     model.command(value.linear[0], value.linear[1], value.angular[2]);
   }
   void step(const Grid &grid, uint32_t, int64_t) {
