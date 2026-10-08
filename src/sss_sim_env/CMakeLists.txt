@@ -1,5 +1,8 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.16)
 project(sss_sim_env)
+find_package(XgcXrpc REQUIRED CONFIG)
+find_package(Boost 1.75 REQUIRED COMPONENTS json)
+find_package(Threads REQUIRED)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -11,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
+  rosgraph_msgs
   message_generation
   nodelet
 )
@@ -25,40 +29,29 @@ add_message_files(
   TimeRequest.msg
 )
 
-add_service_files(
-  FILES
-  ClientRegister.srv
-  ClientUnregister.srv
-  SimClockControl.srv
-)
-
 generate_messages(
   DEPENDENCIES
   std_msgs
+  rosgraph_msgs
 )
 
 # Output include directories and libraries for other package to use
 catkin_package(
    INCLUDE_DIRS include 
    LIBRARIES ClockUpdater sss_timer sss_sleep
-   CATKIN_DEPENDS roscpp rospy std_msgs message_runtime
+   CATKIN_DEPENDS roscpp rospy std_msgs rosgraph_msgs message_runtime
 )
-
-# add_executable(sim_clock src/sim_clock/sim_clock.cpp
-#                          src/sim_clock/TimeServer.cpp 
-#                         )
-
-# target_link_libraries(sim_clock
-#    ${catkin_LIBRARIES}
-# )
 
 ############## sim_clock nodelet plugin lib ################
 
 add_library(sim_clock 
                 src/sim_clock/sim_clock.cpp
-                src/sim_clock/TimeServer.cpp)
+                src/sim_clock/TimeServer.cpp
+                src/sim_clock/ClockControl.cpp)
 
+target_compile_features(sim_clock PUBLIC cxx_std_20)
 target_link_libraries(sim_clock
+                      XgcXrpc::http Boost::json Threads::Threads
                       ${catkin_LIBRARIES}
                    )
 
@@ -72,6 +65,9 @@ add_dependencies(sim_clock
 add_library(ClockUpdater
               src/sss_utils/ClockUpdater.cpp
           )
+
+target_compile_features(ClockUpdater PUBLIC cxx_std_20)
+target_link_libraries(ClockUpdater PUBLIC XgcXrpc::http Boost::json ${catkin_LIBRARIES})
 
 add_dependencies(ClockUpdater 
                        ${${PROJECT_NAME}_EXPORTED_TARGETS} 
@@ -140,6 +136,8 @@ install(PROGRAMS
 )
 
 # targets
+install(DIRECTORY include/sss_sim_env/ DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
+
 install(TARGETS sim_clock ClockUpdater sss_timer sss_sleep
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
@@ -154,3 +152,16 @@ install(DIRECTORY plugins
 install(DIRECTORY launch
 	DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
+
+if(CATKIN_ENABLE_TESTING)
+  add_executable(sss_clock_xrpc_test test/clock_xrpc_test.cpp src/sim_clock/ClockControl.cpp)
+  target_compile_features(sss_clock_xrpc_test PRIVATE cxx_std_20)
+  target_link_libraries(sss_clock_xrpc_test PRIVATE XgcXrpc::http Boost::json Threads::Threads)
+  add_test(NAME sss_clock_xrpc COMMAND sss_clock_xrpc_test)
+  find_package(rostest REQUIRED)
+  add_executable(sss_clock_ros_native_test test/clock_ros_native.cpp)
+  target_compile_features(sss_clock_ros_native_test PRIVATE cxx_std_20)
+  add_dependencies(sss_clock_ros_native_test ${${PROJECT_NAME}_EXPORTED_TARGETS})
+  target_link_libraries(sss_clock_ros_native_test PRIVATE gtest ClockUpdater sss_timer XgcXrpc::http Boost::json ${catkin_LIBRARIES})
+  add_rostest(test/clock_ros_native.test DEPENDENCIES sim_clock sss_clock_ros_native_test)
+endif()

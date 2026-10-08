@@ -1,9 +1,12 @@
 <?xml version="1.0"?>
 <launch>
+    <arg name="control_socket"/>
+    <param name="/sss_clock/control_socket" value="$(arg control_socket)"/>
     
     <arg name="max_speed_ratio" default="100"/>
     <arg name="auto_start" default="true"/>
     <arg name="open_ui" default="true"/>
+    <arg name="native_workers" default="4"/>
 
     <arg name="use_sim_time" value="true"/>
 
@@ -11,9 +14,11 @@
     <param name="/use_sss_sim_time" value="$(arg use_sim_time)"/>
 
     <node pkg="nodelet" type="nodelet" name="nodelet_manager"  args="manager" output="screen">
+        <param name="num_worker_threads" value="$(arg native_workers)"/>
     </node>
 
     <node pkg="nodelet" type="nodelet" name="sim_clock_nodelet" args="load sss_sim_env/sim_clock_nodelet /nodelet_manager" output="screen">
+        <param name="control_socket" value="$(arg control_socket)"/>
         <param name="max_speed_ratio" type="double" value="$(arg max_speed_ratio)"/>
         <param name="auto_start"  type="bool"  value="$(arg auto_start)"/>
     </node>

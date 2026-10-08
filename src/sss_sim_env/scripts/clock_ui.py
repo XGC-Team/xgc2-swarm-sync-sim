@@ -16,7 +16,8 @@ from ui.main_window import *
 
 import rospy
 from rosgraph_msgs.msg import Clock
-from sss_sim_env.srv import SimClockControl
+from xgc2_xrpc.http import Client, Limits
+from xgc2_xrpc.runtime import Runtime
 import threading
 import time
 
@@ -28,13 +29,28 @@ class RosCommNode(QObject):
         super(RosCommNode,self).__init__()
         self.expected_speed = init_speed
         self.dial_value = self.speed2dialvalue(self.expected_speed)
-        self.clock_service_available = False
         self.clock_sub = rospy.Subscriber("/clock", Clock, self.cb_clock)
-        # rospy.wait_for_service('/sss_clock_control', 0.5) # it will block the GUI
-        try:
-            self.clock_service = rospy.ServiceProxy('/sss_clock_control', SimClockControl)   
-        except rospy.ServiceException as e:
-            print(e)     
+        path = rospy.get_param("/sss_clock/control_socket")
+        self.runtime = Runtime(blocking_workers=1, max_calls=4, max_connections=4, max_sessions=2)
+        discovery = Client(path, runtime=self.runtime, limits=Limits(response_bytes=4096))
+        descriptor = discovery.json("/v1/sss-clock/describe", method="GET", timeout=2.0)
+        discovery.close()
+        self.control = Client(path, runtime=self.runtime, limits=Limits(response_bytes=4096),
+                              instance_id=descriptor["instance_id"])
+        self.revision = self.control.json("/v1/sss-clock/status", {}, timeout=1.0)["desired_revision"]
+
+    def close(self):
+        self.control.close()
+        self.runtime.close()
+
+    def apply_control(self, proceed, speed):
+        # Revision conflicts and unknown delivery are surfaced. No blind replay.
+        result = self.control.json("/v1/sss-clock/control", {
+            "expected_revision": self.revision, "proceed": proceed,
+            "max_speed_ratio": speed}, timeout=1.0)
+        self.revision = result["applied_revision"]
+        self.expected_speed = result["max_speed_ratio"]
+        return result
 
     def cb_clock(self,msg):
         now_sim_time = msg.clock.to_sec()
@@ -46,40 +62,26 @@ class RosCommNode(QObject):
             pass
 
     def call_start(self):
-        if not self.clock_service_available:
-            rospy.wait_for_service('/sss_clock_control', 0.5)
-            self.clock_service_available = True
-        ret = self.clock_service(proceed=True)
-        if ret.success is False:
-            print("[ClockUI] call /sss_clock_control service with false return")
-        else:
-            print("[ClockUI] request clock start if there are clients registered")
+        try:
+            self.apply_control(True, self.expected_speed)
+        except Exception as error:
+            print("[ClockUI] start rejected:", error)
 
     def call_pause(self):
-        if not self.clock_service_available:
-            rospy.wait_for_service('/sss_clock_control', 0.5)
-            self.clock_service_available = True
-        ret = self.clock_service(proceed=False)
-        if ret.success is False:
-            print("[ClockUI] call /sss_clock_control service with false return")
-        else:
-            print("[ClockUI] request clock pause")
-    
+        try:
+            self.apply_control(False, self.expected_speed)
+        except Exception as error:
+            print("[ClockUI] pause rejected:", error)
+
     def call_speed_change(self, dial_value):
-        if dial_value != self.dial_value:
-            new_speed = self.dialvalue2speed(dial_value)
-            print ("[ClockUI] request new speed {}x".format(new_speed))
-            try:
-                ret = self.clock_service(proceed=True, max_sim_speed=new_speed)
-                if ret.success is True:
-                    self.dial_value = dial_value
-                    self.expected_speed = self.dialvalue2speed(self.dial_value)
-                if ret.success is False:
-                    print("[ClockUI] call /sss_clock_control service with false return")
-                    self.signal_dial.emit(self.dial_value)
-            except:
-                print("[ClockUI] /sss_clock_control service unavailable")
-                self.signal_dial.emit(self.dial_value)
+        if dial_value == self.dial_value:
+            return
+        try:
+            self.apply_control(True, self.dialvalue2speed(dial_value))
+            self.dial_value = dial_value
+        except Exception as error:
+            print("[ClockUI] speed change rejected:", error)
+            self.signal_dial.emit(self.dial_value)
 
     def dialvalue2speed(self, dial_value):
         speed = 0.0
@@ -178,7 +180,9 @@ class ClockUI(QObject):
 
         # Block the main funcaton. Release resourses.
         signal.signal(signal.SIGINT, self._signal_handler) # catch Ctrl+C or terminate()
-        sys.exit(self.app.exec_())
+        code = self.app.exec_()
+        self.ros_node.close()
+        sys.exit(code)
     
     def _signal_handler(self, signal, frame):
         sys.exit(0)

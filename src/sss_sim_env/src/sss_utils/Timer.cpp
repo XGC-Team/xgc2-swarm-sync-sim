@@ -34,8 +34,6 @@ Timer::Impl::Impl(const ros::NodeHandle &nh, const ros::Duration &period, const 
 {
     timer_handle_ = TimerManagerExtra::global().add_timer();
 
-    nh_simclock.setCallbackQueue(&simclock_callback_queue_);
-    async_spinner_.start();  // start a new thread to communicate with sim clock
 
     nh_.param<bool>("/use_sss_sim_time", use_sim_time_, false);
 
@@ -48,7 +46,14 @@ Timer::Impl::Impl(const ros::NodeHandle &nh, const ros::Duration &period, const 
         (add request_clock_update() each loop*/
         timer_ = nh_.createTimer(period_, &Timer::Impl::sim_timer_callback, this, oneshot_, autostart_); 
 
-        simclock_online_sub_ = nh_simclock.subscribe("/sss_clock_is_online", 1000, &Timer::Impl::cb_simclock_online, this);
+        // Lifecycle initialization has a finite data-plane handshake budget.
+        const auto until = ros::WallTime::now() + ros::WallDuration(2);
+        while (!TimerManagerExtra::global().add_next_cb_time(timer_handle_, ros::Time::now() + period_)) {
+            if (ros::WallTime::now() >= until || !ros::ok())
+                throw std::runtime_error("SSS clock data-plane initialization deadline exceeded");
+            ros::WallDuration(0.01).sleep();
+        }
+        inited_ = true;
 
         // /* Init callback_queue -> spinner_threads map*/
         // callback_queue_ = nh_.getCallbackQueue();
@@ -86,14 +91,10 @@ void Timer::Impl::sim_timer_callback(const ros::TimerEvent &event)
     ClockUpdaterPtr clock_updater = ThreadClockupdaters::global().get_clockupdater(thread_id);
 
     /* make clock waiting at now util the loop completes */
-    while(!clock_updater->request_clock_update(event.current_expected))
-    {
-        // block until publishing successfully
-        ros::WallDuration(0.1).sleep(); // 0.1 is fine
-
-        std::cout << "[Timer::Impl::sim_timer_callback] Repeat clock_updater->request_clock_update " << event.current_expected.toSec() << std::endl;
+    if (!clock_updater->request_clock_update(event.current_expected)) {
+        ROS_ERROR("SSS clock data plane unavailable"); return;
     }
-    
+
     /* Set next callback expected time as infinity as we are not sure the next expected time now */
     // @TODO In multi spinner thread mode, check if other timers in timer_manager are blocked by this thread especially when this callback contains a sleep. If blocked, add its next time as infinity too.
     /** @bug:
@@ -103,14 +104,9 @@ void Timer::Impl::sim_timer_callback(const ros::TimerEvent &event)
         [Possible Solutions] Manage all timer callback thread IDs. Check if other timers in timer_manager are blocked by this thread. If blocked, add its next_cb_time as infinity too.
      */
     /* This bug does not cause much bad effect if in single thread mode or the speed regulator steps with the minimum timer period (time-wasting) */
-    while(!TimerManagerExtra::global().add_next_cb_time(timer_handle_, ros::TIME_MAX))
-    {
-        // block until publishing successfully
-        ros::WallDuration(0.1).sleep();
-
-        std::cout << "[Timer::Impl::sim_timer_callback] Repeat add_next_cb_time " << ros::TIME_MAX.toSec() << " for timer " << timer_handle_ << std::endl;
+    if (!TimerManagerExtra::global().add_next_cb_time(timer_handle_, ros::TIME_MAX)) {
+        ROS_ERROR("SSS timer data plane unavailable"); return;
     }
-
 
     /* call the main callback function */
     callback_(event);
@@ -154,29 +150,6 @@ void Timer::Impl::start()
         timer_.start();
     }
     started_ = true;
-}
-
-/* Publish the first loop time request when sim clock is online */
-void Timer::Impl::cb_simclock_online(const std_msgs::Bool::ConstPtr& msg)
-{
-    if (msg->data == true)
-    {
-        /* request the first clock update to start the first loop */
-        while(true)
-        {
-            if (TimerManagerExtra::global().add_next_cb_time(timer_handle_, ros::Time::now() + period_))
-            {
-                std::cout << "[Timer::Impl::cb_simclock_online] timer " << timer_handle_ << " add_next_cb_time " << (ros::Time::now() + period_).toSec() << std::endl;
-                break;
-            }
-            // block until publishing successfully
-            ros::WallDuration(0.2).sleep();
-            ROS_INFO("[sss_timer] Repeat the first request_clock_update...");
-        }
-
-        inited_ = true;
-        ROS_INFO("[sss_timer] inited_ = true");
-    }
 }
 
 void Timer::Impl::stop()

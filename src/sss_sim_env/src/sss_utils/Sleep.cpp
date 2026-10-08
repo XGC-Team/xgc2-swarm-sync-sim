@@ -41,31 +41,19 @@ bool Duration::sleep() const
         /* Request sim clock update on this thread */
         ros::Time start = ros::Time::now();
         ros::Time end = start + ros::Duration(sec, nsec);
-        while(!clock_updater->request_clock_update(end))
-        {
-            // block until publishing successfully
-            ros::WallDuration(0.5).sleep();
-
-            std::cout << "[sss_utils::Duration::sleep] Sim clock not online. Repeat clock_updater->request_clock_update " << (ros::Time::now() + ros::Duration(sec, nsec)).toSec() << std::endl;
-        }
+        if (!clock_updater->request_clock_update(end)) return false;
 
         /* Release the time client of the TimerManagerExtra since it may not be updated until this sleep finishes
            , which may cause block when there is a sleep in a callback which has not released timer manager before */
         /* @TODO This release is unsafe in multi thread spinner mode, as other idle threads may not be fast enough to take over other callbacks, 
             so time elapses to 'end' as fast as possible purely depending on the speed regulator.*/
-        while(!TimerManagerExtra::global().clock_updater_->request_clock_update(ros::TIME_MAX)) // assmue that all timers wait in this thread (compromise)
-        {
-            // block until publishing successfully
-            ros::WallDuration(0.5).sleep();
-
-            std::cout << "[sss_utils::Duration::sleep] Sim clock not online. Repeat clock_updater->request_clock_update " << ros::TIME_MAX.toSec() << std::endl;
-        }
+        if (!TimerManagerExtra::global().clock_updater_->request_clock_update(ros::TIME_MAX)) return false;
 
         /* Block until the duration is satisfied */
         {
             // This allows sim time to run up to 150x real-time even for very short sleep durations.
             const uint32_t sleep_nsec = (sec != 0) ? 1000000 : (std::min)(1000000, nsec/150);
-            while (ros::Time::now() < end)
+            while (ros::ok() && ros::Time::now() < end)
             {
                 ros::WallDuration(0, sleep_nsec).sleep();
 
@@ -80,7 +68,7 @@ bool Duration::sleep() const
             TimerManagerExtra::global().request_last_time();  //@FixTODO resume timer manager thread clock request to avoid all threads requesting TIME_MAX
             clock_updater->request_clock_update(ros::TIME_MAX);
 
-            return true;
+            return ros::ok();
         }
         // return ros::Duration(sec, nsec).sleep();
 

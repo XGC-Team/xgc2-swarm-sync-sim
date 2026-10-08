@@ -22,8 +22,10 @@
 #include <thread>
 #include <map>
 #include "sss_sim_env/TimeRequest.h"
-#include "sss_sim_env/ClientRegister.h"
-#include "sss_sim_env/ClientUnregister.h"
+#include <stdexcept>
+namespace xgc2 { namespace xrpc { class HttpClient; } }
+#include <atomic>
+#include <mutex>
 
 // #ifndef MAX_ROS_TIME
 // #define MAX_ROS_TIME UINT32_MAX, 999999999UL  // {sec, nsec}
@@ -38,7 +40,7 @@ class UpdateClockPublisher
     public:
         UpdateClockPublisher()
         {
-            update_clock_pub_ = nh_.advertise<sss_sim_env::TimeRequest>("/sss_time_client/update_clock_request", 1000, true); //latched
+            update_clock_pub_ = nh_.advertise<sss_sim_env::TimeRequest>("/sss_time_client/update_clock_request", 1024, false);
         }
 
         /* static(global) publisher */
@@ -64,7 +66,7 @@ class UpdateClockPublisher
 };
 
 
-class ClockUpdater /*: public std::enable_shared_from_this<ClockUpdater> */
+class ClockUpdater /* : public std::enable_shared_from_this<ClockUpdater> */
 {
     public:
         ClockUpdater();
@@ -77,29 +79,18 @@ class ClockUpdater /*: public std::enable_shared_from_this<ClockUpdater> */
         bool unregister();
 
         /* get the latest request clock time */
-        ros::Time get_request_time() {return request_time_;}
+        ros::Time get_request_time() { std::lock_guard<std::mutex> lock(state_mutex_); return request_time_; }
     
     private:
         bool use_sim_time;
 
-        ros::NodeHandle nh_async_;
-        ros::CallbackQueue callback_queue_;
-        ros::AsyncSpinner async_spinner_{1, &callback_queue_};
-
-        ros::Subscriber simclock_online_sub_;
-        ros::ServiceClient register_client_;
-        ros::ServiceClient unregister_client_;
-
-        int time_client_id_;
-
-        // ros::Publisher update_clock_pub_;
-
-        bool inited_; // if ClockUpdater is inited
-
-        ros::Time request_time_; // requested clock time
-
-        /* Register when sim clock is online */
-        void cb_simclock_online(const std_msgs::Bool::ConstPtr& msg);  
+        std::mutex state_mutex_;
+        bool inited_ = false, has_request_ = false;
+        uint32_t time_client_id_ = 0;
+        ros::Time request_time_;
+        // Process-wide shared C++ SDK pool. No listener/spinner per updater.
+        static xgc2::xrpc::HttpClient& control_client();
+        static std::string next_request_id();
 };
 
 
@@ -109,34 +100,17 @@ typedef std::shared_ptr<ClockUpdater> ClockUpdaterPtr;
 // static std::map<std::thread::id, ClockUpdaterPtr>  thread_clockupdater_map;  
 
 /* static(global) thread->clockupdaters map */
-class ThreadClockupdaters
-{
+class ThreadClockupdaters {
 public:
-    ThreadClockupdaters() {}
-
-    /* static(global) thread->clockupdaters map */
-    static ThreadClockupdaters& global()
-    {
-        static ThreadClockupdaters global;
-        return global;
+    static ThreadClockupdaters& global() { static ThreadClockupdaters global; return global; }
+    ClockUpdaterPtr get_clockupdater(const std::thread::id& thread_id) {
+        if (thread_id != std::this_thread::get_id())
+            throw std::invalid_argument("SSS clock updater must belong to the calling native thread");
+        // Thread exit releases its client; stale thread IDs do not accumulate
+        // in a process-global map. The provider caps the total at 255 clients.
+        thread_local ClockUpdaterPtr updater = std::make_shared<ClockUpdater>();
+        return updater;
     }
-
-    ClockUpdaterPtr get_clockupdater(const std::thread::id& thread_id)
-    {
-        /* If no clockupdater exists on this thread, make a clockupdater */
-        if(thread_clockupdater_map_.find(thread_id) == thread_clockupdater_map_.end())
-        {
-            // std::cout << "[ThreadClockupdaters::get_clockupdater] Create a new clock updater on thread " << thread_id << std::endl;
-            ROS_INFO("[ThreadClockupdaters::get_clockupdater] Create a new clock updater on thread %s", std::to_string(*(unsigned int*)&thread_id).c_str()); 
-            thread_clockupdater_map_[thread_id] = std::make_shared<ClockUpdater>();
-        }
-
-        return thread_clockupdater_map_[thread_id];
-    }
-
-private:
-    // One clockupdater serves for one thread
-    std::map<std::thread::id, ClockUpdaterPtr> thread_clockupdater_map_;
 };
 
 } //sss_utils

@@ -33,7 +33,7 @@ We rewrite the mavros and px4 core modules (based on px4 v1.13.3) to adapt to th
 
 ```bash
 ### 1. Launch sim clock
-roslaunch sss_sim_env sim_clock.launch max_speed_ratio:=1 auto_start:=true
+roslaunch sss_sim_env sim_clock.launch control_socket:="$GRANTED_CONTROL_SOCKET" max_speed_ratio:=1 auto_start:=true
 
 ### 2. Launch multiple mavros-px4-rotor sim nodes (Specify initial positions in the launch file)
 roslaunch px4_rotor_sim multi_px4_rotor_sim.launch
@@ -54,7 +54,7 @@ Some useful commands:
 
 ```bash
 ### [First Step] Arm UAV1
-rosservice call /uav1/mavros/cmd/arming "value: true" 
+rosservice call /uav1/mavros/cmd/arming "value: true"
 
 ### [Second Step] Keep sending position setpoints to UAV1
 rostopic pub /uav1/mavros/setpoint_raw/local mavros_msgs/PositionTarget "header:
@@ -70,7 +70,7 @@ yaw: 0.0
 yaw_rate: 0.0" -r 10
 
 ### [Third Step] In anthor terminal, switch UAV1 into offboard mode:
-rosservice call /uav1/mavros/set_mode "base_mode: 0 
+rosservice call /uav1/mavros/set_mode "base_mode: 0
 custom_mode: 'OFFBOARD'"
 ```
 
@@ -90,7 +90,7 @@ Tello is an educational drone developed by DJI. The [tello_driver](http://wiki.r
 
 ```bash
 ### 1. Launch sim clock
-roslaunch sss_sim_env sim_clock.launch max_speed_ratio:=1 auto_start:=true 
+roslaunch sss_sim_env sim_clock.launch control_socket:="$GRANTED_CONTROL_SOCKET" max_speed_ratio:=1 auto_start:=true
 
 ### 2. Launch multiple tello sim nodes (Specify initial poses in the launch file)
 roslaunch tello_sim multi_tello_sim.launch
@@ -149,7 +149,7 @@ For UGVs with an onboard comupter that receives velocity commands and publishes 
 
 ```bash
 ### 1. Launch sim clock
-roslaunch sss_sim_env sim_clock.launch max_speed_ratio:=1 auto_start:=true 
+roslaunch sss_sim_env sim_clock.launch control_socket:="$GRANTED_CONTROL_SOCKET" max_speed_ratio:=1 auto_start:=true
 
 ### 2. Launch multiple ugv sim nodes (Specify initial poses, ugv types in the launch file)
 roslaunch ugv_sim multi_ugv_sim.launch
@@ -200,7 +200,7 @@ We offer a  simulation library for fixed-wing UAVs with autopilots which receive
 
 ```bash
 ### 1. Launch sim clock (Recommended)
-roslaunch sss_sim_env sim_clock.launch max_speed_ratio:=1 auto_start:=true
+roslaunch sss_sim_env sim_clock.launch control_socket:="$GRANTED_CONTROL_SOCKET" max_speed_ratio:=1 auto_start:=true
 
 ### 2. Launch multiple fixed-wing UAV simulation nodes (Specify initial positions in the launch file)
 roslaunch fw_plane_sim multi_fw_sim.launch
@@ -229,7 +229,7 @@ angular:
   x: 0.0 # pitch setpoint (deg) (should be 0 if height_setpoint is valid)
   y: 1.0 # target mode (1 for offboard control)
   z: 0.0" -r 10
-  
+
 ### Read states
 rostopic echo /uav1/angle # Roll, pitch, yaw (deg) (FRD frame)
 rostopic echo /uav1/pos # x, y, z (m) (NED frame)
@@ -259,17 +259,16 @@ To achieve the simulation acceleration, a sim clock is designed to govern the si
 ```bash
 ### 1. Launch sim clock
 # You can also specify max_simulation_rate and auto_start in the launch file
-roslaunch sss_sim_env sim_clock.launch max_speed_ratio:=1 auto_start:=true
+roslaunch sss_sim_env sim_clock.launch control_socket:="$GRANTED_CONTROL_SOCKET" max_speed_ratio:=1 auto_start:=true
 ```
 
-To control the simulation clock:
+Clock management and client registration use [SSS Clock v1 XRPC](contracts/sss-clock-v1.md). The process owner must pass an explicit socket allocation in a private runtime directory. For example, send `POST /v1/sss-clock/control` with the discovered instance and this JSON body:
 
-```bash
-# @param proceed: true(go on), false(stop)
-# @param max_sim_speed: 0.0 (keep unchanged)
-rosservice call /sss_clock_control "proceed: true
-max_sim_speed: 0.0"
+```json
+{"expected_revision":1,"proceed":true,"max_speed_ratio":1.0}
 ```
+
+The native receipt reports applied pause/speed state; `/clock` and algorithm time-request data remain ROS. Clock reset pauses and fences all registered clients. It does not reset vehicle physics.
 
 You can also tune the clock by the UI interface developed by PyQt5:
 
@@ -305,10 +304,10 @@ It is noted that these **sss_utils APIs** are equal to the **original ROS APIs**
 <launch>
     <param name="/use_sim_time" value="true"/> <!-- use sss sim time -->
     <param name="/use_sss_sim_time" value="true"/> <!-- use sss sim time -->
-    
+
     <param name="/use_sim_time" value="false"/>  <!-- use original ROS time -->
     <param name="/use_sss_sim_time" value="false"/> <!-- use original ROS time -->
-   
+
     <node ... />
 </launch>
 ```

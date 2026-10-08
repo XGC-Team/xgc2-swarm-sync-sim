@@ -26,6 +26,7 @@
 #include <memory>
 #include <thread>
 #include <vector>
+#include <climits>
 #include "sss_sim_env/ClockUpdater.hpp"
 
 
@@ -98,12 +99,6 @@ class Timer
              */
             void sim_timer_callback(const ros::TimerEvent &event);
 
-            ros::NodeHandle nh_simclock;
-            ros::CallbackQueue simclock_callback_queue_;
-            ros::Subscriber simclock_online_sub_;
-            ros::AsyncSpinner async_spinner_{1, &simclock_callback_queue_};
-            /* Publish the first loop time request when sim clock is online */
-            void cb_simclock_online(const std_msgs::Bool::ConstPtr& msg);
         };
 
         typedef std::shared_ptr<Impl> ImplPtr;
@@ -183,7 +178,7 @@ class TimerManagerExtra
             if (use_sim_time_)
             {
                 nh_.setCallbackQueue(&callback_queue_);
-                async_spinner_.start(); // start a new thread to listen to clock updates
+                // Fixed process-wide data spinner starts after initialized state below.
 
                 ROS_INFO("[TimerManagerExtra] Create a new clock updater for ROS internal timer manager thread"); 
                 clock_updater_ = std::make_shared<ClockUpdater>();
@@ -191,6 +186,8 @@ class TimerManagerExtra
                 clock_sub_ = nh_.subscribe("/clock", 10, &TimerManagerExtra::cb_clock, this);
 
                 dummy_timer_ = nh_.createTimer(ros::DURATION_MAX, &TimerManagerExtra::dummy_timer_callback, this);
+                timer_info_list_.reserve(255);
+                async_spinner_.start();
                 // Call dummy_timer_.setPeriod() for faster loop speed in simulation.
 
                 std::cout << "[sss_utils::TimerManagerExtra] Init" << std::endl;
@@ -209,7 +206,9 @@ class TimerManagerExtra
         {
             std::lock_guard<std::mutex> lockGuard(timer_info_list_mutex_);
 
+            if (timer_info_list_.size() >= 255) throw std::runtime_error("SSS process timer limit reached");
             static int handle = 0;
+            if (handle == INT_MAX) throw std::runtime_error("SSS timer handle exhausted");
             timer_info_list_.emplace_back(
                 TimerInfo
                 {
@@ -226,21 +225,15 @@ class TimerManagerExtra
 
         bool remove_timer_info(int handle)
         {
-            /* find the time info that matches the handle id */
-            auto it = std::find_if(timer_info_list_.begin(), timer_info_list_.end(), [handle](TimerInfo timer_info){return timer_info.handle == handle;});
-
-            if (it == timer_info_list_.end())
-            {
-                std::cout << "[sss_utils::TimerManagerExtra] remove timer info failed. Handle " << handle << " not found." << std::endl;
-                return false;
-            }
-            else
-            {
-                add_next_cb_time(handle, ros::TIME_MAX);
-                timer_info_list_.erase(it);
-                //@TODO reuse the handle id for new timer info?
-                return true;
-            }
+            // Publish the released intent before removing a record, with each
+            // phase synchronized; no iterator survives unlocking.
+            add_next_cb_time(handle, ros::TIME_MAX);
+            std::lock_guard<std::mutex> lock(timer_info_list_mutex_);
+            auto it = std::find_if(timer_info_list_.begin(), timer_info_list_.end(),
+                                  [handle](const TimerInfo& info) { return info.handle == handle; });
+            if (it == timer_info_list_.end()) return false;
+            timer_info_list_.erase(it);
+            return true;
         }
 
         /* add next expected triggerred time of a timer callback */

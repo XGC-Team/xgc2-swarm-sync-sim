@@ -1,132 +1,60 @@
-/**
- * @file ClockUpdater.hpp
- * @author Peixuan Shu (shupeixuan@qq.com)
- * @brief Update sim clock. Utilized by other sim/real agent nodes.
- * 
- * Note: This program relies on 
- * 
- * @version 1.0
- * @date 2023-12-7
- * 
- * @license BSD 3-Clause License
- * @copyright (c) 2023, Peixuan Shu
- * All rights reserved.
- * 
- */
-
-
 #include "sss_sim_env/ClockUpdater.hpp"
-
-namespace sss_utils
-{
-
-ClockUpdater::ClockUpdater()
-    : inited_(false)
-{
-    nh_async_.param<bool>("/use_sss_sim_time", use_sim_time, false);
-
-    if (use_sim_time){
-        // ROS_INFO("[ClockUpdater] use_sss_sim_time == true. Init. Waiting for sim_clock online.");
-
-        nh_async_.setCallbackQueue(&callback_queue_);
-        async_spinner_.start(); // start a new thread to listen to sim clock online
-
-        simclock_online_sub_ = nh_async_.subscribe("/sss_clock_is_online", 1000, &ClockUpdater::cb_simclock_online, this);
-        register_client_ = nh_async_.serviceClient<sss_sim_env::ClientRegister>("/sss_timeclient_register");
-        unregister_client_ = nh_async_.serviceClient<sss_sim_env::ClientUnregister>("/sss_timeclient_unregister");
-
-        UpdateClockPublisher::global(); // Create a global update_clock_publisher if has not been created
-    }
-    else{
-        ROS_INFO("[ClockUpdater] use_sss_sim_time == false. Skip!");
-    }
+#include <xgc2/xrpc/http.hpp>
+#include <boost/json.hpp>
+#include <stdexcept>
+namespace sss_utils {
+namespace j = boost::json;
+xgc2::xrpc::HttpClient& ClockUpdater::control_client() {
+  // Explicit bootstrap path read once by this process; not a mutable ROS
+  // control authority. A restart requires an explicit new binding/client.
+  static auto client = [] {
+    ros::NodeHandle nh; std::string path;
+    if (!nh.getParam("/sss_clock/control_socket", path) || path.empty())
+      throw std::invalid_argument("SSS control_socket bootstrap binding required");
+    xgc2::xrpc::HttpClient discovery(path);
+    xgc2::xrpc::HttpRequest req; req.method = "GET"; req.target = "/v1/sss-clock/describe";
+    auto result = discovery.call(req, xgc2::xrpc::Clock::now() + std::chrono::seconds(2));
+    if (result.status != 200) throw std::runtime_error("SSS control discovery rejected");
+    auto instance = std::string(j::parse(result.body).as_object().at("instance_id").as_string());
+    return std::make_unique<xgc2::xrpc::HttpClient>(path, xgc2::xrpc::HttpLimits{}, instance);
+  }();
+  return *client;
 }
-
-ClockUpdater::~ClockUpdater()
-{
-    // Unregister from /sss_timeclient_unregister
-    unregister();
+std::string ClockUpdater::next_request_id() {
+  static const std::string prefix = xgc2::xrpc::new_instance_id();
+  static std::atomic<uint64_t> seq{0}; return prefix + ":" + std::to_string(++seq);
 }
-
-/* Register when sim clock is online */
-void ClockUpdater::cb_simclock_online(const std_msgs::Bool::ConstPtr& msg)
-{
-    // std::cout << "[ClockUpdater::cb_simclock_online] Detect sim_clock online!" << std::endl;
-
-    if (msg->data == true)
-    {
-        sss_sim_env::ClientRegister srv;
-        while(!register_client_.call(srv))  // block until registered successfully
-        {
-            ros::WallDuration(0.5).sleep();
-            ROS_INFO("[ClockUpdater] Waiting for service /sss_timeclient_register...");
-        }
-
-        time_client_id_ = srv.response.client_id;
-        ROS_INFO("[ClockUpdater] register to /sss_timeclient_register with response id = %s", std::to_string(time_client_id_).c_str());
-        
-        // update_clock_pub_ = nh_.advertise<rosgraph_msgs::Clock>("/sss_time_client"+std::to_string(time_client_id_)+"/update_clock_request", 1000, true); //latched
-
-        inited_ = true;
-
-        // std::cout << "[ClockUpdater::cb_simclock_online] inited_ = true" << std::endl;
-
-        // request_clock_update(ros::TIME_MAX); // Request infinity time on init
-    }
+ClockUpdater::ClockUpdater() {
+  ros::NodeHandle nh; nh.param<bool>("/use_sss_sim_time", use_sim_time, false);
+  if (!use_sim_time) return;
+  xgc2::xrpc::HttpRequest req; req.method = "POST"; req.target = "/v1/sss-clock/client/register";
+  req.body = "{}"; req.request_id = next_request_id();
+  auto result = control_client().call(req, xgc2::xrpc::Clock::now() + std::chrono::seconds(2));
+  if (result.status != 200) throw std::runtime_error("SSS client registration rejected");
+  time_client_id_ = j::parse(result.body).as_object().at("client_id").to_number<uint32_t>();
+  UpdateClockPublisher::global(); inited_ = true;
 }
-
-/* Publish new time request */
-bool ClockUpdater::request_clock_update(const ros::Time &new_time)
-{
-    if (use_sim_time){
-        if (inited_)
-        {
-            if (new_time != request_time_)
-            {
-                request_time_ = new_time;
-
-                // rosgraph_msgs::ClockPtr msg(new rosgraph_msgs::Clock);
-                // msg->clock = new_time;
-                // update_clock_pub_.publish(msg);
-
-                // ROS_INFO("[ClockUpdater%s] publish %ss to topic update_clock_request", std::to_string(time_client_id_).c_str(), std::to_string(new_time.toSec()).c_str());
-
-                return UpdateClockPublisher::global().publish(time_client_id_, request_time_);
-            }
-            else
-            {
-                return true;
-            }
-        }
-        else
-        {
-            ROS_INFO("[ClockUpdater%s] Not inited.", std::to_string(time_client_id_).c_str());
-            return false;
-        }
-    }
-    return true;
+ClockUpdater::~ClockUpdater() { try { unregister(); } catch (...) { /* bounded best effort on destruction */ } }
+bool ClockUpdater::request_clock_update(const ros::Time& new_time) {
+  std::lock_guard<std::mutex> lock(state_mutex_);
+  if (!use_sim_time) return true;
+  if (!inited_) return false;
+  if (has_request_ && new_time == request_time_) return true;
+  // No network/JSON/retry/wait here: only existing bounded ROS data publication.
+  if (!UpdateClockPublisher::global().publish(time_client_id_, new_time)) return false;
+  request_time_ = new_time; has_request_ = true; return true;
 }
-
-/* unregister from time server. Stop time request in the future */
-bool ClockUpdater::unregister()
-{
-    if (use_sim_time){
-        sss_sim_env::ClientUnregister srv;
-        srv.request.client_id = time_client_id_;
-        if(unregister_client_.call(srv))
-        {
-            ROS_INFO("[ClockUpdater%s] Unregister!", std::to_string(time_client_id_).c_str());
-            std::cout << "[ClockUpdater" << time_client_id_ << "] Unregister" << std::endl;
-            return true;
-        }
-        else
-        {
-            ROS_INFO("[ClockUpdater%s] Fail to unregister!", std::to_string(time_client_id_).c_str());
-            std::cout << "[ClockUpdater" << time_client_id_ << "] Fail to unregister" << std::endl;
-            return false;
-        }
-    }
-    return true;
+bool ClockUpdater::unregister() {
+  uint32_t id;
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    if (!use_sim_time || !inited_) return true;
+    id = time_client_id_; inited_ = false;
+  }
+  xgc2::xrpc::HttpRequest req; req.method = "POST"; req.target = "/v1/sss-clock/client/unregister";
+  req.request_id = next_request_id(); req.body = j::serialize(j::object{{"client_id", id}});
+  auto result = control_client().call(req, xgc2::xrpc::Clock::now() + std::chrono::milliseconds(200));
+  if (result.status == 200 || result.status == 404) { return true; }
+  return false;
 }
-
 }
