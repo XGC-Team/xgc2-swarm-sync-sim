@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(sss_sim_env)
+find_package(PythonInterp 3.10 REQUIRED)
 find_package(XgcXrpc REQUIRED CONFIG)
 find_package(Boost 1.75 REQUIRED COMPONENTS json)
 find_package(Threads REQUIRED)

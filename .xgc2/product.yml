@@ -1,7 +1,7 @@
 schema: xgc2.product.v1
 id: xgc2-swarm-sync-sim
 name: XGC2 Swarm Sync Sim
-version: 1.1.0-15
+version: 1.1.0-16
 kind: ros1-apt
 summary: Multi-vehicle synchronized simulation packages for ROS Noetic.
 ros:
@@ -27,12 +27,15 @@ apt:
     ros-noetic-sss-fw-plane-sim:
     - amd64
   depends:
+  - libxgc2-xrpc1 (>= 0.1.0)
+  - libboost-json-dev (>= 1.75)
   - ros-noetic-sss-sim-env (>= 1.1.0-8)
   - ros-noetic-sss-px4-rotor-sim (>= 1.1.0-8)
   - ros-noetic-sss-tello-sim (>= 1.1.0-8)
   - ros-noetic-sss-ugv-sim (>= 1.1.0-8)
   - ros-noetic-sss-fw-plane-sim (>= 1.1.0-8)
 usage:
+  notes: Clock process workflow requires an explicit control_socket. GUI consumes the formal XRPC wheel with an explicitly selected Python >=3.10 and matching PyQt/ROS modules. Stock Focal system Python is not replaced; controlled ABI/runtime acceptance remains open.
   install: 'sudo apt update
 
     sudo apt install ros-noetic-swarm-sync-sim
@@ -54,6 +57,10 @@ ownership:
   - /opt/ros/noetic/lib/ugv_sim
   - /opt/ros/noetic/lib/fw_plane_sim
 release:
+  requires:
+  - xgc2-xrpc
+  dependency_policy:
+    xgc2-xrpc: rebuild
   skip_apt_verify: true
   apt_versions:
-    focal: 1.1.0-15
+    focal: 1.1.0-16

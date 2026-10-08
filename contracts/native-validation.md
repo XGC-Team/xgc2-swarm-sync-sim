@@ -51,3 +51,14 @@ is instrumented, the installed SDK libraries are not, so this is not a fresh
 sanitizer assertion about SDK internals. Vehicle variant integration, client
 crash leases, cold worker lifecycle preparation and deployment logging/ABI
 remain open. No GUI visual check or full SSS physics experiment is claimed.
+
+Packaging follow-up: Debian revision incremented for the unpublished source candidate;
+package control now declares formal libxgc2-xrpc1>=0.1.0 and Boost JSON>=1.75.
+No package was published or installed. The release-set snapshot is unchanged.
+Python SDK consumers use an explicitly selected interpreter>=3.10 with the
+formal wheel, not a made-up Python SDK Debian package or replaced system Python.
+SSS UI configures PYTHON_EXECUTABLE through PythonInterp>=3.10 and fails early
+for an older interpreter; PyQt/ROS modules must exist in that same interpreter.
+Focal controlled runtime/toolchain and that selected Python environment remain
+unverified deployment gates. No new host Gazebo/GDB fixture was launched after
+the user hard stop.

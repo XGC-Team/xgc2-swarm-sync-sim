@@ -6,6 +6,8 @@
 # @license: BSD v3
 
 import sys
+if sys.version_info < (3, 10):
+    raise RuntimeError('Clock UI requires an explicitly selected Python >= 3.10 and the formal XRPC wheel')
 import os
 import signal
 
