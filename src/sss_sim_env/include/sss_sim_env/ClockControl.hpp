@@ -34,7 +34,7 @@ private:
   };
   struct Receipt { std::string id, fingerprint; ClockDomain::Result result; };
   struct Observer { bool active = false; uint64_t after = 0; xgc2::xrpc::HttpReply reply; };
-  void handle(xgc2::xrpc::HttpRequest req, xgc2::xrpc::HttpReply reply);
+  void handle(xgc2::xrpc::HttpRequest req, const xgc2::xrpc::HttpReply& reply);
   void flush();
   xgc2::xrpc::HttpResponse response(const Receipt* receipt = nullptr) const;
   std::array<Slot, 16> slots_{};

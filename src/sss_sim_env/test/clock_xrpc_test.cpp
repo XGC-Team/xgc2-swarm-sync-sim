@@ -1,5 +1,5 @@
 #include "sss_sim_env/ClockControl.hpp"
-#include <boost/json.hpp>
+#include "sss_sim_env/ClockJson.hpp"
 #include <atomic>
 #include <cassert>
 #include <filesystem>
@@ -7,7 +7,7 @@
 #include <iostream>
 #include <thread>
 #include <unistd.h>
-namespace j = boost::json;
+namespace j = sss_utils::clock_json;
 using namespace xgc2::xrpc;
 using namespace sss_utils;
 struct Fixture {
@@ -40,7 +40,7 @@ int main() {
   char tmp[] = "/tmp/sss-clock-xrpc.XXXXXX"; auto* dir = mkdtemp(tmp); assert(dir);
   const auto path = std::string(dir) + "/control.sock";
   uint64_t seq = 0;
-  auto call = [&](HttpClient& client, std::string method, j::object payload, std::string id = "", int ms = 1000) {
+  auto call = [&](HttpClient& client, std::string method, j::Object payload, std::string id = "", int ms = 1000) {
     HttpRequest req; req.method = "POST"; req.target = "/v1/sss-clock/" + method;
     req.body = j::serialize(payload); req.request_id = id.empty() ? "test:" + std::to_string(++seq) : id;
     return client.call(req, Clock::now() + std::chrono::milliseconds(ms));
@@ -48,34 +48,34 @@ int main() {
   auto describe = [&](HttpClient& discovery) {
     HttpRequest req; req.method = "GET"; req.target = "/v1/sss-clock/describe";
     auto result = discovery.call(req, Clock::now() + std::chrono::seconds(1)); assert(result.status == 200);
-    return std::string(j::parse(result.body).as_object().at("instance_id").as_string());
+    return std::string(j::parse(result.body)["instance_id"].asString());
   };
   std::string first_instance;
   {
     Fixture fixture(path); HttpClient discovery(path); first_instance = describe(discovery);
     HttpClient client(path, {}, first_instance);
-    auto status = j::parse(call(client, "status", {}).body).as_object();
-    assert(status.at("paused").as_bool());
-    auto desired = status.at("desired_revision").to_number<uint64_t>();
+    auto status = j::parse(call(client, "status", {}).body);
+    assert(status["paused"].asBool());
+    auto desired = status["desired_revision"].asLargestUInt();
     assert(call(client, "control", {{"expected_revision", desired}, {"proceed", true}, {"max_speed_ratio", -1}}).status == 400);
     assert(call(client, "control", {{"expected_revision", desired + 1}, {"proceed", true}, {"max_speed_ratio", 1}}).status == 409);
     assert(call(client, "status", {{"unknown", true}}).status == 400);
     auto reg = call(client, "client/register", {}, "register-once"); assert(reg.status == 200);
-    auto id = j::parse(reg.body).as_object().at("client_id").to_number<uint32_t>();
+    auto id = j::parse(reg.body)["client_id"].asUInt();
     auto replay = call(client, "client/register", {}, "register-once"); assert(replay.status == 200);
-    assert(j::parse(replay.body).as_object().at("client_id").to_number<uint32_t>() == id);
-    assert(j::parse(call(client, "status", {}).body).as_object().at("clients").to_number<uint32_t>() == 1);
+    assert(j::parse(replay.body)["client_id"].asUInt() == id);
+    assert(j::parse(call(client, "status", {}).body)["clients"].asUInt() == 1);
     assert(call(client, "client/unregister", {{"client_id", id}}).status == 200);
-    auto next = j::parse(call(client, "client/register", {}).body).as_object().at("client_id").to_number<uint32_t>();
+    auto next = j::parse(call(client, "client/register", {}).body)["client_id"].asUInt();
     assert(next != id); assert(call(client, "client/unregister", {{"client_id", id}}).status == 404);
     for (int i = 1; i < 255; ++i) assert(call(client, "client/register", {}).status == 200);
     assert(call(client, "client/register", {}).status == 429);
     auto reset = call(client, "reset", {{"expected_revision", desired}, {"time_ns", 0}});
     assert(reset.status == 200);
-    auto reset_state = j::parse(reset.body).as_object();
-    assert(reset_state.at("paused").as_bool()); assert(reset_state.at("clients").to_number<int>() == 0);
+    auto reset_state = j::parse(reset.body);
+    assert(reset_state["paused"].asBool()); assert(reset_state["clients"].asInt() == 0);
     assert(call(client, "client/unregister", {{"client_id", next}}).status == 404);
-    desired = reset_state.at("desired_revision").to_number<uint64_t>();
+    desired = reset_state["desired_revision"].asLargestUInt();
     fixture.hold.store(true); std::this_thread::sleep_for(std::chrono::milliseconds(20));
     bool expired = false;
     try { call(client, "control", {{"expected_revision", desired}, {"proceed", true}, {"max_speed_ratio", 1}}, "cancel-before-native", 20); }
@@ -84,9 +84,9 @@ int main() {
     std::this_thread::sleep_for(std::chrono::milliseconds(100)); fixture.hold.store(false);
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
     HttpClient check(path, {}, first_instance);
-    auto unchanged = j::parse(call(check, "status", {}).body).as_object();
-    assert(unchanged.at("desired_revision").to_number<uint64_t>() == desired);
-    assert(unchanged.at("paused").as_bool());
+    auto unchanged = j::parse(call(check, "status", {}).body);
+    assert(unchanged["desired_revision"].asLargestUInt() == desired);
+    assert(unchanged["paused"].asBool());
     // Burst beyond the fixed listener/admission budget while the native owner
     // is held. Every expired command must release without a native effect.
     fixture.hold.store(true); std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -103,21 +103,21 @@ int main() {
     for (auto& item : burst) assert(item.get());
     std::this_thread::sleep_for(std::chrono::milliseconds(50)); fixture.hold.store(false);
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
-    assert(j::parse(call(check, "status", {}).body).as_object().at("clients").to_number<int>() == 0);
+    assert(j::parse(call(check, "status", {}).body)["clients"].asInt() == 0);
     // An observation is held and released by a native state transition.
-    auto rev = unchanged.at("revision").to_number<uint64_t>();
+    auto rev = unchanged["revision"].asLargestUInt();
     auto observation = std::async(std::launch::async, [&] {
       HttpClient observer(path, {}, first_instance);
       HttpRequest req; req.method = "POST"; req.target = "/v1/sss-clock/observe";
-      req.body = j::serialize(j::object{{"after_revision", rev}}); req.request_id = "held-observer";
+      req.body = j::serialize(j::Object{{"after_revision", rev}}); req.request_id = "held-observer";
       return observer.call(req, Clock::now() + std::chrono::seconds(1));
     });
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
     assert(observation.wait_for(std::chrono::milliseconds(0)) == std::future_status::timeout);
     auto config = call(check, "control", {{"expected_revision", desired}, {"proceed", true}, {"max_speed_ratio", 1}});
     assert(config.status == 200); assert(observation.get().status == 200);
-    auto applied = j::parse(config.body).as_object();
-    assert(applied.at("desired_revision") == applied.at("applied_revision"));
+    auto applied = j::parse(config.body);
+    assert(applied["desired_revision"] == applied["applied_revision"]);
   }
   assert(!std::filesystem::exists(path));
   {
@@ -128,7 +128,7 @@ int main() {
     catch (const HttpCallError& e) { fenced = e.code == "conflict"; }
     assert(fenced);
     HttpClient fresh(path, {}, second);
-    assert(j::parse(call(fresh, "status", {}).body).as_object().at("clients").to_number<int>() == 0);
+    assert(j::parse(call(fresh, "status", {}).body)["clients"].asInt() == 0);
   }
   for (const auto& field : std::vector<std::pair<std::string,std::string>>{
       {"XGC2_XRPC_UNKNOWN", "1"}, {"XGC2_XRPC_HOST_MAX_CONNECTIONS", "32"},
@@ -142,12 +142,12 @@ int main() {
     RuntimePolicyOptions options; options.environment.emplace_back("XGC2_XRPC_HOST_MAX_CONNECTIONS", "8");
     Fixture configured(path, options); HttpClient discovery(path); auto instance = describe(discovery);
     HttpClient client(path, {}, instance);
-    auto effective = j::parse(call(client, "effective-policy", {}).body).as_object(); bool found = false;
-    for (const auto& item : effective.at("fields").as_array()) {
-      const auto& field = item.as_object();
-      if (field.at("name").as_string() == "HOST_MAX_CONNECTIONS") {
-        found = true; assert(field.at("value").to_number<int>() == 8);
-        assert(field.at("source").as_string() == "environment"); assert(field.at("ceiling").to_number<int>() == 16);
+    auto effective = j::parse(call(client, "effective-policy", {}).body); bool found = false;
+    for (const auto& item : effective["fields"]) {
+      const auto& field = item;
+      if (field["name"].asString() == "HOST_MAX_CONNECTIONS") {
+        found = true; assert(field["value"].asInt() == 8);
+        assert(field["source"].asString() == "environment"); assert(field["ceiling"].asInt() == 16);
       }
     }
     assert(found);

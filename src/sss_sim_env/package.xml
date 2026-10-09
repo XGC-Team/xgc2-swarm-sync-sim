@@ -44,7 +44,7 @@
   <!--   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>libxgc2-xrpc-dev</build_depend>
   <exec_depend>libxgc2-xrpc1</exec_depend>
-  <depend>libboost-json-dev</depend>
+  <depend>jsoncpp</depend>
   <depend>rosgraph_msgs</depend> -->
   <!-- Use exec_depend for packages you need at runtime: -->
     <exec_depend>message_runtime</exec_depend>
@@ -55,7 +55,7 @@
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>libxgc2-xrpc-dev</build_depend>
   <exec_depend>libxgc2-xrpc1</exec_depend>
-  <depend>libboost-json-dev</depend>
+  <depend>jsoncpp</depend>
   <depend>rosgraph_msgs</depend>
   <build_depend>roscpp</build_depend>
   <build_depend>rospy</build_depend>

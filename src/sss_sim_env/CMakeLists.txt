@@ -1,8 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 project(sss_sim_env)
-find_package(PythonInterp 3.10 REQUIRED)
+find_package(PythonInterp 3 REQUIRED)
 find_package(XgcXrpc REQUIRED CONFIG)
-find_package(Boost 1.75 REQUIRED COMPONENTS json)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(JSONCPP REQUIRED IMPORTED_TARGET jsoncpp)
 find_package(Threads REQUIRED)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
@@ -50,9 +51,9 @@ add_library(sim_clock
                 src/sim_clock/TimeServer.cpp
                 src/sim_clock/ClockControl.cpp)
 
-target_compile_features(sim_clock PUBLIC cxx_std_20)
+target_compile_features(sim_clock PRIVATE cxx_std_20)
 target_link_libraries(sim_clock
-                      XgcXrpc::http Boost::json Threads::Threads
+                      XgcXrpc::http PkgConfig::JSONCPP Threads::Threads
                       ${catkin_LIBRARIES}
                    )
 
@@ -67,8 +68,8 @@ add_library(ClockUpdater
               src/sss_utils/ClockUpdater.cpp
           )
 
-target_compile_features(ClockUpdater PUBLIC cxx_std_20)
-target_link_libraries(ClockUpdater PUBLIC XgcXrpc::http Boost::json ${catkin_LIBRARIES})
+target_compile_features(ClockUpdater PRIVATE cxx_std_20)
+target_link_libraries(ClockUpdater PRIVATE XgcXrpc::http PkgConfig::JSONCPP ${catkin_LIBRARIES})
 
 add_dependencies(ClockUpdater 
                        ${${PROJECT_NAME}_EXPORTED_TARGETS} 
@@ -157,12 +158,20 @@ install(DIRECTORY launch
 if(CATKIN_ENABLE_TESTING)
   add_executable(sss_clock_xrpc_test test/clock_xrpc_test.cpp src/sim_clock/ClockControl.cpp)
   target_compile_features(sss_clock_xrpc_test PRIVATE cxx_std_20)
-  target_link_libraries(sss_clock_xrpc_test PRIVATE XgcXrpc::http Boost::json Threads::Threads)
+  target_link_libraries(sss_clock_xrpc_test PRIVATE XgcXrpc::http PkgConfig::JSONCPP Threads::Threads)
   add_test(NAME sss_clock_xrpc COMMAND sss_clock_xrpc_test)
   find_package(rostest REQUIRED)
   add_executable(sss_clock_ros_native_test test/clock_ros_native.cpp)
   target_compile_features(sss_clock_ros_native_test PRIVATE cxx_std_20)
   add_dependencies(sss_clock_ros_native_test ${${PROJECT_NAME}_EXPORTED_TARGETS})
-  target_link_libraries(sss_clock_ros_native_test PRIVATE gtest ClockUpdater sss_timer XgcXrpc::http Boost::json ${catkin_LIBRARIES})
-  add_rostest(test/clock_ros_native.test DEPENDENCIES sim_clock sss_clock_ros_native_test)
+  target_link_libraries(sss_clock_ros_native_test PRIVATE gtest ClockUpdater sss_timer XgcXrpc::http PkgConfig::JSONCPP ${catkin_LIBRARIES})
+  set(clock_test_runtime "${CMAKE_CURRENT_BINARY_DIR}/clock-runtime")
+  file(MAKE_DIRECTORY "${clock_test_runtime}")
+  execute_process(COMMAND chmod 0700 "${clock_test_runtime}" RESULT_VARIABLE clock_test_chmod)
+  if(NOT clock_test_chmod EQUAL 0)
+    message(FATAL_ERROR "Cannot prepare private clock test runtime")
+  endif()
+  add_rostest(test/clock_ros_native.test
+    ARGS control_socket:=${clock_test_runtime}/clock.sock
+    DEPENDENCIES sim_clock sss_clock_ros_native_test)
 endif()

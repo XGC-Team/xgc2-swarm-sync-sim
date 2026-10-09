@@ -9,7 +9,7 @@ stops/joins HTTP and releases the owned socket. ROS `/clock` and user algorithm
 `TimeRequest` data stay ROS; ROS clock-control/register/unregister services and
 their generated .srv interfaces have been removed.
 
-Build: C++20/GCC >=11 with matching libstdc++, Boost.JSON >=1.75,
+Build: C++20/Clang 10 in the published Focal full builder, distribution JsonCpp,
 `XgcXrpc::http`, native ROS1/rosgraph_msgs/nodelet. The public ClockUpdater
 facade does not expose SDK headers into user algorithm hot code.
 

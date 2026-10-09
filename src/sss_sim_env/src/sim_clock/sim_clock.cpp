@@ -33,7 +33,12 @@ public:
         // ros::NodeHandle nh = getMTNodeHandle();
         // ros::NodeHandle nh_private = getMTPrivateNodeHandle();
 
-        time_server = std::make_unique<TimeServer>(nh, nh_private);
+        try {
+            time_server = std::make_unique<TimeServer>(nh, nh_private);
+        } catch (const std::exception& error) {
+            ROS_FATAL_STREAM("SSS clock initialization failed: " << error.what());
+            throw;
+        }
 
         ROS_INFO("SimClock Inited");
         // NODELET_DEBUG("My debug statement");

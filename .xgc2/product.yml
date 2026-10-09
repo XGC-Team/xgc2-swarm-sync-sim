@@ -28,14 +28,14 @@ apt:
     - amd64
   depends:
   - libxgc2-xrpc1 (>= 0.1.0)
-  - libboost-json-dev (>= 1.75)
+  - libjsoncpp1 (>= 1.7.4)
   - ros-noetic-sss-sim-env (>= 1.1.0-8)
   - ros-noetic-sss-px4-rotor-sim (>= 1.1.0-8)
   - ros-noetic-sss-tello-sim (>= 1.1.0-8)
   - ros-noetic-sss-ugv-sim (>= 1.1.0-8)
   - ros-noetic-sss-fw-plane-sim (>= 1.1.0-8)
 usage:
-  notes: Clock process workflow requires an explicit control_socket. GUI consumes the formal XRPC wheel with an explicitly selected Python >=3.10 and matching PyQt/ROS modules. Stock Focal system Python is not replaced; controlled ABI/runtime acceptance remains open.
+  notes: Clock process workflow requires an explicit control_socket. GUI consumes the formal XRPC wheel with Python >=3.8 and matching PyQt/ROS modules. Stock Focal Python is supported.
   install: 'sudo apt update
 
     sudo apt install ros-noetic-swarm-sync-sim

@@ -1,9 +1,9 @@
 #include "sss_sim_env/ClockUpdater.hpp"
 #include <xgc2/xrpc/http.hpp>
-#include <boost/json.hpp>
+#include "sss_sim_env/ClockJson.hpp"
 #include <stdexcept>
 namespace sss_utils {
-namespace j = boost::json;
+namespace j = sss_utils::clock_json;
 xgc2::xrpc::HttpClient& ClockUpdater::control_client() {
   // Explicit bootstrap path read once by this process; not a mutable ROS
   // control authority. A restart requires an explicit new binding/client.
@@ -15,7 +15,7 @@ xgc2::xrpc::HttpClient& ClockUpdater::control_client() {
     xgc2::xrpc::HttpRequest req; req.method = "GET"; req.target = "/v1/sss-clock/describe";
     auto result = discovery.call(req, xgc2::xrpc::Clock::now() + std::chrono::seconds(2));
     if (result.status != 200) throw std::runtime_error("SSS control discovery rejected");
-    auto instance = std::string(j::parse(result.body).as_object().at("instance_id").as_string());
+    auto instance = std::string(j::parse(result.body)["instance_id"].asString());
     return std::make_unique<xgc2::xrpc::HttpClient>(path, xgc2::xrpc::HttpLimits{}, instance);
   }();
   return *client;
@@ -31,7 +31,7 @@ ClockUpdater::ClockUpdater() {
   req.body = "{}"; req.request_id = next_request_id();
   auto result = control_client().call(req, xgc2::xrpc::Clock::now() + std::chrono::seconds(2));
   if (result.status != 200) throw std::runtime_error("SSS client registration rejected");
-  time_client_id_ = j::parse(result.body).as_object().at("client_id").to_number<uint32_t>();
+  time_client_id_ = j::parse(result.body)["client_id"].asUInt();
   UpdateClockPublisher::global(); inited_ = true;
 }
 ClockUpdater::~ClockUpdater() { try { unregister(); } catch (...) { /* bounded best effort on destruction */ } }
@@ -52,7 +52,7 @@ bool ClockUpdater::unregister() {
     id = time_client_id_; inited_ = false;
   }
   xgc2::xrpc::HttpRequest req; req.method = "POST"; req.target = "/v1/sss-clock/client/unregister";
-  req.request_id = next_request_id(); req.body = j::serialize(j::object{{"client_id", id}});
+  req.request_id = next_request_id(); req.body = j::serialize(j::Object{{"client_id", id}});
   auto result = control_client().call(req, xgc2::xrpc::Clock::now() + std::chrono::milliseconds(200));
   if (result.status == 200 || result.status == 404) { return true; }
   return false;
