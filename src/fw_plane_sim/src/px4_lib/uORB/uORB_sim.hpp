@@ -201,7 +201,7 @@ class Subscription
         }
 
     private:
-        int &agent_id_ = -1; // UAV id. Note that & denotes reference passing, so agent_id_ can change with agent_id
+        int &agent_id_; // UAV id. Note that & denotes reference passing, so agent_id_ can change with agent_id
         std::vector<T> &global_uorb_msgs_; // & denotes reference passing
         T last_uorb_msg_; // to decide whether data updates
 };
@@ -278,7 +278,7 @@ class Publication
             }
         }
     private:
-        int &agent_id_ = -1; // UAV id. Note that & denotes reference passing, so agent_id_ can change with agent_id
+        int &agent_id_; // UAV id. Note that & denotes reference passing, so agent_id_ can change with agent_id
         std::vector<T> &global_uorb_msgs_; // & denotes Reference passing
 };
 
