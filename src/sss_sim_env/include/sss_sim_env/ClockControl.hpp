@@ -1,7 +1,6 @@
 #pragma once
 #include "ClockDomain.hpp"
 #include <xgc2/xrpc/http.hpp>
-#include <xgc2/xrpc/runtime_policy.hpp>
 #include <atomic>
 #include <array>
 #include <functional>
@@ -19,7 +18,7 @@ struct ClockCommand {
 };
 class ClockControl {
 public:
-  explicit ClockControl(std::string path, ClockDomain::Snapshot initial, xgc2::xrpc::RuntimePolicyOptions options = {});
+  explicit ClockControl(std::string path, ClockDomain::Snapshot initial);
   ~ClockControl();
   void process(const std::function<ClockDomain::Result(const ClockCommand&)>& apply);
   bool publish(ClockDomain::Snapshot snapshot);
@@ -45,7 +44,6 @@ private:
   std::mutex mutex_;
   std::thread io_;
   std::atomic<xgc2::xrpc::HttpServer*> server_{nullptr};
-  const xgc2::xrpc::RuntimePolicy policy_;
   const std::string instance_id_;
 };
 }

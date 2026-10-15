@@ -1,39 +1,20 @@
 #include "sss_sim_env/ClockControl.hpp"
 #include "sss_sim_env/ClockJson.hpp"
-#include <type_traits>
 #include <future>
 #include <stdexcept>
 namespace sss_utils {
 namespace {
 namespace j = clock_json;
 using namespace xgc2::xrpc;
-RuntimePolicy product_policy(RuntimePolicyOptions options) {
-  options.defaults["HOST_MAX_CONNECTIONS"] = "16";
-  options.defaults["HOST_MAX_IN_FLIGHT"] = "16";
-  options.defaults["MAX_REQUEST_BYTES"] = "4096";
-  options.defaults["MAX_RESPONSE_BYTES"] = "4096";
-  options.defaults["CALL_TIMEOUT_MS"] = "5000";
-  options.defaults["IDLE_TIMEOUT_MS"] = "5000";
-  options.default_source = "sss-clock";
-  options.ceilings["HOST_MAX_CONNECTIONS"] = 16;
-  options.ceilings["HOST_MAX_IN_FLIGHT"] = 16;
-  options.ceilings["MAX_REQUEST_BYTES"] = 4096;
-  options.ceilings["MAX_RESPONSE_BYTES"] = 4096;
-  return resolve_runtime_policy(options);
-}
-HttpResponse policy_response(const RuntimePolicy& policy) {
-  Json::Value fields(Json::arrayValue);
-  for (const auto& f : policy.fields()) {
-    auto field = j::object({{"name", std::string(f.name)}, {"source", std::string(f.source)},
-      {"source_detail", f.source_detail}, {"dynamic", f.dynamic}, {"unit", std::string(f.unit)}});
-    std::visit([&](const auto& value) {
-      if constexpr (std::is_integral_v<std::decay_t<decltype(value)>>) field["value"] = Json::Int64(value);
-      else field["value"] = value;
-    }, f.value);
-    field["ceiling"] = f.ceiling ? Json::Value(Json::Int64(*f.ceiling)) : Json::Value();
-    fields.append(std::move(field));
-  }
-  return {200, {{"Content-Type", "application/json"}}, j::serialize(j::Object{{"revision", Json::UInt64(policy.revision())}, {"fields", std::move(fields)}})};
+HttpLimits control_limits() {
+  HttpLimits limits;
+  limits.connections = 16;
+  limits.inflight = 16;
+  limits.request_bytes = 4096;
+  limits.response_bytes = 4096;
+  limits.request_timeout = std::chrono::milliseconds(5000);
+  limits.idle_timeout = std::chrono::milliseconds(5000);
+  return limits;
 }
 
 Json::Value object(const HttpRequest& req, std::initializer_list<const char*> allowed) {
@@ -54,12 +35,12 @@ uint64_t number(const Json::Value& object, const char* name) {
   return value.asUInt64();
 }
 }
-ClockControl::ClockControl(std::string path, ClockDomain::Snapshot initial, RuntimePolicyOptions options)
-    : snapshot_(initial), policy_(product_policy(std::move(options))), instance_id_(xgc2::xrpc::new_instance_id()) {
+ClockControl::ClockControl(std::string path, ClockDomain::Snapshot initial)
+    : snapshot_(initial), instance_id_(xgc2::xrpc::new_instance_id()) {
   std::promise<void> started; auto ready = started.get_future();
   io_ = std::thread([this, path = std::move(path), started = std::move(started)]() mutable {
     try {
-      auto limits = http_limits(policy_);
+      auto limits = control_limits();
       HttpServer server(UnixOptions{path}, [this](auto req, const HttpReply& reply) { handle(std::move(req), reply); },
         limits, HttpIdentity{instance_id_, {"/v1/sss-clock/describe"}});
       server.set_wakeup_handler([this] { flush(); });
@@ -106,9 +87,6 @@ void ClockControl::handle(HttpRequest req, const HttpReply& reply) {
         {"clients", 255}, {"commands", 16}, {"observers", 16}, {"receipts", 64}, {"persistence", false}})}); return;
     }
     if (req.method != "POST") { reply.complete(http_error(404, "not_found", "unknown operation")); return; }
-    if (req.target == "/v1/sss-clock/effective-policy") {
-      object(req, {}); reply.complete(policy_response(policy_)); return;
-    }
     if (req.target == "/v1/sss-clock/status") {
       object(req, {}); std::lock_guard lock(mutex_); reply.complete(response()); return;
     }

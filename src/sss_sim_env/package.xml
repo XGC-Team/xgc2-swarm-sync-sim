@@ -43,7 +43,7 @@
   <!-- Use buildtool_depend for build tool packages: -->
   <!--   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>libxgc2-xrpc-dev</build_depend>
-  <exec_depend>libxgc2-xrpc1</exec_depend>
+  <exec_depend>libxgc2-xrpc2</exec_depend>
   <depend>jsoncpp</depend>
   <depend>rosgraph_msgs</depend> -->
   <!-- Use exec_depend for packages you need at runtime: -->
@@ -54,7 +54,7 @@
   <!--   <doc_depend>doxygen</doc_depend> -->
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>libxgc2-xrpc-dev</build_depend>
-  <exec_depend>libxgc2-xrpc1</exec_depend>
+  <exec_depend>libxgc2-xrpc2</exec_depend>
   <depend>jsoncpp</depend>
   <depend>rosgraph_msgs</depend>
   <build_depend>roscpp</build_depend>

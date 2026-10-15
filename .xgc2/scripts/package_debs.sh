@@ -138,7 +138,7 @@ fw_plane_pkg="ros-noetic-sss-fw-plane-sim"
 build_deb \
   "${sim_env_pkg}" \
   "sss_sim_env" \
-  "${base_depends}, libxgc2-xrpc1 (>= 0.1.0), libjsoncpp1 (>= 1.7.4), ros-noetic-message-runtime, ros-noetic-nodelet, ros-noetic-pluginlib, ros-noetic-rosgraph-msgs, python3-pyqt5" \
+  "${base_depends}, libxgc2-xrpc2 (>= 0.2.0), libjsoncpp1 (>= 1.7.4), ros-noetic-message-runtime, ros-noetic-nodelet, ros-noetic-pluginlib, ros-noetic-rosgraph-msgs, python3-pyqt5" \
   "XGC2 Swarm Sync Sim shared simulation clock and utilities" \
   libsim_clock libClockUpdater libsss_timer libsss_sleep
 

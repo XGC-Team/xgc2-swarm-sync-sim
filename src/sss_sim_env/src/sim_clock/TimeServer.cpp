@@ -1,6 +1,5 @@
 #include "sss_sim_env/TimeServer.hpp"
 #include <stdexcept>
-extern char** environ;
 
 TimeServer::TimeServer(const ros::NodeHandle& nh, const ros::NodeHandle& private_nh)
     : nh_(nh), nh_private_(private_nh), nh_async_(nh) {
@@ -12,14 +11,7 @@ TimeServer::TimeServer(const ros::NodeHandle& nh, const ros::NodeHandle& private
   if (!nh_private_.getParam("control_socket", socket) || socket.empty())
     throw std::invalid_argument("control_socket must be an explicit private runtime allocation");
   domain_ = std::make_unique<sss_utils::ClockDomain>(speed, start);
-  xgc2::xrpc::RuntimePolicyOptions control_policy;
-  for (char** item = environ; item && *item; ++item) {
-    std::string_view entry(*item);
-    if (!entry.starts_with("XGC2_XRPC_")) continue;
-    const auto separator = entry.find('=');
-    control_policy.environment.emplace_back(entry.substr(0, separator), entry.substr(separator + 1));
-  }
-  control_ = std::make_unique<sss_utils::ClockControl>(socket, domain_->snapshot(), std::move(control_policy));
+  control_ = std::make_unique<sss_utils::ClockControl>(socket, domain_->snapshot());
   nh_async_.setCallbackQueue(&async_callback_queue_);
   sim_clock_pub_ = nh_.advertise<rosgraph_msgs::Clock>("/clock", 10, true);
   online_pub_ = nh_.advertise<std_msgs::Bool>("/sss_clock_is_online", 1, true);

@@ -27,7 +27,6 @@ operation ID; native completion is required before `succeeded`.
 | Method under `/v1/sss-clock/` | Exact request |
 | --- | --- |
 | `status` | `{}` |
-| `effective-policy` | `{}` |
 | `control` | `{"expected_revision":1,"proceed":true,"max_speed_ratio":1.0}` |
 | `reset` | `{"expected_revision":2,"time_ns":0}` |
 | `client/register` | `{}` |
@@ -99,7 +98,7 @@ No desired configuration, receipts or health are saved to disk. Each world
 instance has fresh handles/revisions. Socket/SDK lease lock use only the granted
 runtime allocation; the process supervisor cleans that allocation after stop
 and owns bounded stderr/ROS logs. Production ROS_HOME/ROS_LOG_DIR allocations,
-shipped SDK/ABI packages remain deployment gates. The composition root snapshots XGC2_XRPC_ inputs once and uses the formal C++ RuntimePolicy resolver; `effective-policy` exposes values/sources/ceilings. Unknown, empty, unsupported and over-ceiling settings reject startup. This HTTP host does not claim diagnostics, client-registry or gRPC policy enforcement. Tests grant fresh transient paths and never touch the live station.
+shipped SDK/ABI packages remain deployment gates. The composition root sets explicit HTTP limits: 16 connections and in-flight calls, 4096-byte request and response bodies, and 5000 ms request and idle timeouts. It reads no XGC2_XRPC_ policy environment and exposes no effective-policy operation. This HTTP host does not claim diagnostics, client-registry or gRPC policy enforcement. Tests grant fresh transient paths and never touch the live station.
 
 Evidence: `test/native` is a ROS-independent real SDK/socket fixture over the
 same native ClockDomain and command host. It checks revisions, strict fields,

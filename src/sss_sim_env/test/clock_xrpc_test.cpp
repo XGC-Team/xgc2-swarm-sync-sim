@@ -15,7 +15,7 @@ struct Fixture {
   ClockControl control;
   std::atomic<bool> stop{false}, hold{false};
   std::thread owner;
-  explicit Fixture(const std::string& path, RuntimePolicyOptions options = {}) : control(path, domain.snapshot(), std::move(options)) {
+  explicit Fixture(const std::string& path) : control(path, domain.snapshot()) {
     owner = std::thread([this] {
       while (!stop.load()) {
         if (!hold.load()) {
@@ -130,27 +130,18 @@ int main() {
     HttpClient fresh(path, {}, second);
     assert(j::parse(call(fresh, "status", {}).body)["clients"].asInt() == 0);
   }
-  for (const auto& field : std::vector<std::pair<std::string,std::string>>{
-      {"XGC2_XRPC_UNKNOWN", "1"}, {"XGC2_XRPC_HOST_MAX_CONNECTIONS", "32"},
-      {"XGC2_XRPC_CALL_TIMEOUT_MS", ""}, {"XGC2_XRPC_LOG_LEVEL", "debug"}}) {
-    RuntimePolicyOptions options; options.environment.push_back(field); bool rejected = false;
-    try { Fixture invalid(path, options); }
-    catch (const RuntimePolicyError&) { rejected = true; }
-    assert(rejected); assert(!std::filesystem::exists(path));
-  }
   {
-    RuntimePolicyOptions options; options.environment.emplace_back("XGC2_XRPC_HOST_MAX_CONNECTIONS", "8");
-    Fixture configured(path, options); HttpClient discovery(path); auto instance = describe(discovery);
+    // Product limits are explicit and independent of the removed SDK policy
+    // environment. Oversized requests still fail at the HTTP admission bound.
+    setenv("XGC2_XRPC_HOST_MAX_CONNECTIONS", "invalid", 1);
+    Fixture bounded(path); HttpClient discovery(path); auto instance = describe(discovery);
+    unsetenv("XGC2_XRPC_HOST_MAX_CONNECTIONS");
     HttpClient client(path, {}, instance);
-    auto effective = j::parse(call(client, "effective-policy", {}).body); bool found = false;
-    for (const auto& item : effective["fields"]) {
-      const auto& field = item;
-      if (field["name"].asString() == "HOST_MAX_CONNECTIONS") {
-        found = true; assert(field["value"].asInt() == 8);
-        assert(field["source"].asString() == "environment"); assert(field["ceiling"].asInt() == 16);
-      }
-    }
-    assert(found);
+    HttpRequest request; request.method = "POST"; request.target = "/v1/sss-clock/status";
+    request.request_id = "oversized"; request.body = std::string(4097, ' ');
+    assert(client.call(request, Clock::now() + std::chrono::seconds(1)).status == 413);
+    assert(call(client, "effective-policy", {}).status == 404);
+    assert(call(client, "status", {}).status == 200);
   }
   // The real native clock cannot advance while paused or when all algorithms
   // are inactive; reset fences old data handles and backdated data is rejected.

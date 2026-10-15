@@ -27,7 +27,7 @@ apt:
     ros-noetic-sss-fw-plane-sim:
     - amd64
   depends:
-  - libxgc2-xrpc1 (>= 0.1.0)
+  - libxgc2-xrpc2 (>= 0.2.0)
   - libjsoncpp1 (>= 1.7.4)
   - ros-noetic-sss-sim-env (>= 1.1.0-8)
   - ros-noetic-sss-px4-rotor-sim (>= 1.1.0-8)
